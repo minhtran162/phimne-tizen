@@ -5,9 +5,12 @@ import { deleteAsync as del } from 'del';
 import dom from 'gulp-dom';
 import path from 'path';
 import scan from 'gulp-scan';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Allow overriding of jellyfin-web directory
-let WEB_DIR = process.env.JELLYFIN_WEB_DIR || 'node_modules/jellyfin-web/dist';
+let WEB_DIR = process.env.JELLYFIN_WEB_DIR;
 WEB_DIR = path.resolve(WEB_DIR);
 console.info('Using jellyfin-web from', WEB_DIR);
 
