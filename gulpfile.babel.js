@@ -1,71 +1,84 @@
+import axios from 'axios';
+import { load } from 'cheerio';
+import { deleteAsync as del } from 'del';
+import 'dotenv/config';
 import fs from 'fs';
 import gulp from 'gulp';
-import gulpif from 'gulp-if';
-import { deleteAsync as del } from 'del';
 import dom from 'gulp-dom';
+import remoteSrc from 'gulp-remote-src';
 import path from 'path';
-import scan from 'gulp-scan';
 
-// Allow overriding of jellyfin-web directory
-let WEB_DIR = process.env.JELLYFIN_WEB_DIR || 'node_modules/jellyfin-web/dist';
-WEB_DIR = path.resolve(WEB_DIR);
-console.info('Using jellyfin-web from', WEB_DIR);
+// your external URL:
+const WEB_DIR = process.env.WEB_DIR;
 
-const DISCARD_UNUSED_FONTS = !!process.env.DISCARD_UNUSED_FONTS;
+if (!WEB_DIR) {
+    throw new Error('WEB_DIR environment variable is not defined');
+}
 
 const paths = {
-    assets: {
-        src: [
-            WEB_DIR + '/**/*',
-            '!' + WEB_DIR + '/index.html'
-        ],
-        dest: 'www/'
-    },
-    index: {
-        src: WEB_DIR + '/index.html',
-        dest: 'www/'
-    }
+    assets: { dest: 'www/' },
+    index: { dest: 'www/' }
 };
 
-// Clean the www directory
-function clean() {
-    return del([
-        'www'
-    ]);
+async function clean() {
+    await del(['www/**']);
 }
 
-// Search for used fonts and add them to assets
-function searchFonts() {
-    if (!DISCARD_UNUSED_FONTS) return Promise.resolve('skipped');
-
-    const assets = paths.assets.src;
-
-    assets.push('!' + WEB_DIR + '/*.woff2');
-
-    return gulp.src(WEB_DIR + '/main*.js')
-        .pipe(scan({
-            term: /[a-z0-9._-]*\.woff2/gi,
-            fn: function (match) {
-                const font = WEB_DIR + '/' + match;
-                if (!assets.includes(font) && fs.existsSync(font)) {
-                    console.debug(`Found font ${match}`);
-                    assets.push(font);
-                }
-            }
-        }));
+async function fetchIndex() {
+    try {
+        return axios.get(`${WEB_DIR}index.html`)
+            .then(res => {
+                fs.mkdirSync(paths.index.dest, { recursive: true });
+                fs.writeFileSync(path.join(paths.index.dest, 'index.html'), res.data);
+            });
+    } catch (error) {
+        console.error(error);
+    }
 }
 
-// Copy unmodified assets
+// Download all assets (js, css, fonts, images…)
 function copy() {
-    return gulp.src(paths.assets.src, { encoding: false })
-        .pipe(gulp.dest(paths.assets.dest));
+    const indexHtml = fs.readFileSync(path.join(paths.index.dest, 'index.html'), 'utf8');
+    const $ = load(indexHtml);
+
+    const assets = [];
+
+    $('script[src]').each((_, el) => assets.push($(el).attr('src')));
+    $('link[rel="stylesheet"]').each((_, el) => assets.push($(el).attr('href')));
+    $('img[src]').each((_, el) => assets.push($(el).attr('src')));
+
+    // Separate absolute and relative URLs
+    const remoteAssets = assets.filter(file => !file.startsWith('http'));
+    const absoluteAssets = assets.filter(file => file.startsWith('http'));
+
+    // Download only relative assets from WEB_DIR
+    const relativeDownload = remoteSrc(remoteAssets.map(a => a.replace(/^\//, '')), {
+        base: WEB_DIR
+    }).pipe(gulp.dest(paths.assets.dest));
+
+    // Download absolute files using axios/fs manually
+    const absoluteDownload = Promise.all(
+        absoluteAssets.map(async url => {
+            try {
+                const filename = url.split('/').pop();
+                const filepath = path.join(paths.assets.dest, filename);
+                const res = await axios.get(url, { responseType: 'arraybuffer' });
+                fs.writeFileSync(filepath, res.data);
+            } catch (err) {
+                console.error('Failed absolute asset:', url);
+            }
+        })
+    );
+
+    return Promise.all([relativeDownload, absoluteDownload]);
 }
 
-// Add required tags to index.html
+
+// Inject CSP, tizen.js, etc.
 function modifyIndex() {
-    return gulp.src(paths.index.src)
-        .pipe(dom(function() {
-            // inject CSP meta tag
+
+    return gulp.src(path.join(paths.index.dest, 'index.html'))
+        .pipe(dom(function () {
             const meta = this.createElement('meta');
             meta.setAttribute('http-equiv', 'Content-Security-Policy');
             meta.setAttribute('content', 'default-src * \'self\' \'unsafe-inline\' \'unsafe-eval\' data: gap: file: filesystem: ws: wss:;');
@@ -115,21 +128,19 @@ function modifyIndex() {
 
             return this;
         }))
-        .pipe(gulp.dest(paths.index.dest))
+        .pipe(gulp.dest(paths.index.dest));
 }
 
 // Default build task
 const build = gulp.series(
     clean,
-    searchFonts,
+    fetchIndex,
     gulp.parallel(copy, modifyIndex)
 );
 
 // Export tasks so they can be run individually
 export {
-    clean,
-    copy,
-    modifyIndex
+    clean, copy, fetchIndex, modifyIndex
 };
 // Export default task
 export default build;

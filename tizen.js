@@ -24,7 +24,7 @@
     var AppInfo = {
         deviceId: getDeviceId(),
         deviceName: 'Samsung Smart TV',
-        appName: 'Jellyfin for Tizen',
+        appName: 'Phim Ne TV for Tizen',
         appVersion: tizen.application.getCurrentApplication().appInfo.version
     };
 
@@ -109,9 +109,14 @@
                 return AppInfo.deviceName;
             },
 
-            exit: function () {
-                postMessage('AppHost.exit');
-                tizen.application.getCurrentApplication().exit();
+            exit: async function () {
+                try {
+                    await runSmartViewUpdate();
+                    tizen.application.getCurrentApplication().exit();
+                } catch (error) {
+                    console.error('Error:', error.message);
+                    tizen.application.getCurrentApplication().exit();
+                }
             },
 
             getDefaultLayout: function () {
