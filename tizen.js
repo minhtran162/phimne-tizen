@@ -24,7 +24,7 @@
     var AppInfo = {
         deviceId: getDeviceId(),
         deviceName: 'Samsung Smart TV',
-        appName: 'Phim Ne TV for Tizen',
+        appName: 'Phim Ne for Tizen',
         appVersion: tizen.application.getCurrentApplication().appInfo.version
     };
 
@@ -40,7 +40,6 @@
         'otherapppromotions',
         'targetblank',
         'screensaver',
-        'multiserver',
         'subtitleappearancesettings',
         'subtitleburnsettings'
     ];
@@ -109,14 +108,9 @@
                 return AppInfo.deviceName;
             },
 
-            exit: async function () {
-                try {
-                    await runSmartViewUpdate();
-                    tizen.application.getCurrentApplication().exit();
-                } catch (error) {
-                    console.error('Error:', error.message);
-                    tizen.application.getCurrentApplication().exit();
-                }
+            exit: function () {
+                postMessage('AppHost.exit');
+                tizen.application.getCurrentApplication().exit();
             },
 
             getDefaultLayout: function () {
