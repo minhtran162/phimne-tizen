@@ -24,7 +24,7 @@
     var AppInfo = {
         deviceId: getDeviceId(),
         deviceName: 'Samsung Smart TV',
-        appName: 'Jellyfin for Tizen',
+        appName: 'Phim Ne for Tizen',
         appVersion: tizen.application.getCurrentApplication().appInfo.version
     };
 
@@ -40,7 +40,6 @@
         'otherapppromotions',
         'targetblank',
         'screensaver',
-        'multiserver',
         'subtitleappearancesettings',
         'subtitleburnsettings'
     ];
